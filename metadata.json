@@ -1,0 +1,7 @@
+{
+  "name": "MM&GG Real Estate Ltd.",
+  "description": "A premium, AI-powered real estate platform for luxury property sales, featuring intelligent market insights and personal property assistants.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
