@@ -1,212 +1,232 @@
+import React, { useMemo, useState } from 'react';
+import { generateCryptoSignal } from './services/geminiService';
+import { SignalRequest, TradingSignal } from './types';
 
-import React, { useState } from 'react';
-import Navbar from './components/Navbar';
-import Hero from './components/Hero';
-import PropertyCard from './components/PropertyCard';
-import AIChatAssistant from './components/AIChatAssistant';
-import { SAMPLE_PROPERTIES } from './constants';
-import { getMarketInsights } from './services/geminiService';
-import { MarketInsight } from './types';
+const timeframes: TradingSignal['timeframe'][] = ['15m', '30m', '1h', '4h', '1d'];
+const riskProfiles: SignalRequest['riskProfile'][] = ['conservative', 'balanced', 'aggressive'];
+
+const signalTheme: Record<TradingSignal['signal'], string> = {
+  strong_buy: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  buy: 'bg-lime-100 text-lime-700 border-lime-200',
+  neutral: 'bg-slate-100 text-slate-700 border-slate-200',
+  sell: 'bg-orange-100 text-orange-700 border-orange-200',
+  strong_sell: 'bg-rose-100 text-rose-700 border-rose-200',
+};
+
+const formatSignal = (signal: TradingSignal['signal']) => signal.replace('_', ' ').toUpperCase();
 
 const App: React.FC = () => {
-  const [insightLocation, setInsightLocation] = useState('London');
-  const [insight, setInsight] = useState<MarketInsight | null>(null);
-  const [isLoadingInsight, setIsLoadingInsight] = useState(false);
+  const [pair, setPair] = useState('BTC/USDT');
+  const [timeframe, setTimeframe] = useState<TradingSignal['timeframe']>('15m');
+  const [riskProfile, setRiskProfile] = useState<SignalRequest['riskProfile']>('balanced');
+  const [marketContext, setMarketContext] = useState('');
+  const [chartFileName, setChartFileName] = useState('');
+  const [chartImageBase64, setChartImageBase64] = useState<string | undefined>(undefined);
+  const [chartImageMimeType, setChartImageMimeType] = useState<string | undefined>(undefined);
+  const [signal, setSignal] = useState<TradingSignal | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const fetchInsights = async () => {
-    setIsLoadingInsight(true);
+  const canSubmit = useMemo(() => pair.trim().length > 0 && !isLoading, [pair, isLoading]);
+
+  const handleFileUpload = async (file?: File) => {
+    if (!file) {
+      setChartFileName('');
+      setChartImageBase64(undefined);
+      setChartImageMimeType(undefined);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const [, data = ''] = result.split(',');
+      setChartFileName(file.name);
+      setChartImageBase64(data);
+      setChartImageMimeType(file.type || 'image/png');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const createSignal = async () => {
+    if (!canSubmit) return;
+    setError('');
+    setIsLoading(true);
+
     try {
-      const data = await getMarketInsights(insightLocation);
-      setInsight(data);
+      const response = await generateCryptoSignal({
+        pair: pair.trim().toUpperCase(),
+        timeframe,
+        riskProfile,
+        marketContext,
+        chartImageBase64,
+        chartImageMimeType,
+      });
+      setSignal(response);
     } catch (err) {
       console.error(err);
+      setError('Could not generate signal. Check API key and try again.');
     } finally {
-      setIsLoadingInsight(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white selection:bg-slate-900 selection:text-white">
-      <Navbar />
-      
-      <main>
-        <Hero />
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-6xl mx-auto px-4 py-12 space-y-8">
+        <header className="space-y-4">
+          <p className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] px-3 py-1 rounded-full bg-violet-500/20 text-violet-200 border border-violet-400/30">
+            Crypto Signal Maker
+          </p>
+          <h1 className="text-4xl md:text-5xl font-black">AI Signal Bot with News + Pattern Context</h1>
+          <p className="text-slate-300 max-w-3xl">
+            Upload a chart screenshot (15m, 30m, 1h, 4h, 1d), add context, and generate a structured signal with entry zone,
+            TP/SL levels, pattern detection, and recent-news-aware reasoning.
+          </p>
+        </header>
 
-        {/* Featured Properties */}
-        <section className="py-24 bg-slate-50/50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
-              <div>
-                <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">Curated Collection</h2>
-                <p className="text-slate-600 max-w-xl">Explore our hand-picked selection of global residences that redefine luxury and comfort.</p>
-              </div>
-              <div className="flex gap-4">
-                <button className="px-6 py-3 bg-white border border-slate-200 rounded-xl font-semibold text-slate-900 hover:bg-slate-50 transition">
-                  Filter Listings
-                </button>
-                <button className="px-6 py-3 bg-slate-900 text-white rounded-xl font-semibold hover:bg-slate-800 transition shadow-lg shadow-slate-200">
-                  View All
-                </button>
-              </div>
-            </div>
+        <section className="grid lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-5">
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Trading pair</span>
+              <input
+                value={pair}
+                onChange={(e) => setPair(e.target.value)}
+                placeholder="BTC/USDT"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </label>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {SAMPLE_PROPERTIES.map(property => (
-                <PropertyCard key={property.id} property={property} />
-              ))}
-            </div>
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Timeframe</span>
+              <select
+                value={timeframe}
+                onChange={(e) => setTimeframe(e.target.value as TradingSignal['timeframe'])}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3"
+              >
+                {timeframes.map((tf) => (
+                  <option key={tf} value={tf}>{tf}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Risk profile</span>
+              <select
+                value={riskProfile}
+                onChange={(e) => setRiskProfile(e.target.value as SignalRequest['riskProfile'])}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3"
+              >
+                {riskProfiles.map((risk) => (
+                  <option key={risk} value={risk}>{risk}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Chart screenshot (optional)</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFileUpload(e.target.files?.[0])}
+                className="w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-violet-500/20 file:text-violet-100 file:px-3 file:py-2"
+              />
+              {chartFileName && <p className="text-xs text-violet-200">Loaded: {chartFileName}</p>}
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm text-slate-300">Market notes (optional)</span>
+              <textarea
+                rows={4}
+                value={marketContext}
+                onChange={(e) => setMarketContext(e.target.value)}
+                placeholder="Ex: Breakout above resistance, RSI divergence, CPI news in 2 hours..."
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3"
+              />
+            </label>
+
+            <button
+              onClick={createSignal}
+              disabled={!canSubmit}
+              className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 font-semibold rounded-xl py-3 transition"
+            >
+              {isLoading ? 'Analyzing…' : 'Generate Signal'}
+            </button>
+            {error && <p className="text-sm text-rose-300">{error}</p>}
           </div>
-        </section>
 
-        {/* AI Market Insights Section */}
-        <section className="py-24">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="bg-slate-900 rounded-[40px] overflow-hidden shadow-2xl flex flex-col lg:flex-row">
-              <div className="flex-1 p-10 lg:p-20 text-white">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full mb-6">
-                   <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-                   <span className="text-[10px] font-bold tracking-widest uppercase">Live AI Intelligence</span>
-                </div>
-                <h2 className="text-4xl md:text-5xl font-bold mb-8 leading-tight">
-                  Real-time <span className="serif italic font-light">Market Intelligence</span>.
-                </h2>
-                <p className="text-slate-400 mb-10 text-lg leading-relaxed">
-                  Leverage our proprietary AI models to understand global market shifts before they happen. Get instant reports on any luxury neighborhood worldwide.
-                </p>
-
-                <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                  <input 
-                    type="text" 
-                    value={insightLocation}
-                    onChange={(e) => setInsightLocation(e.target.value)}
-                    placeholder="Enter location (e.g. Dubai, London, NYC)"
-                    className="flex-1 bg-white/10 border-white/20 rounded-2xl px-6 py-4 focus:ring-2 focus:ring-white/50 text-white placeholder:text-white/30"
-                  />
-                  <button 
-                    onClick={fetchInsights}
-                    disabled={isLoadingInsight}
-                    className="px-8 py-4 bg-white text-slate-900 font-bold rounded-2xl hover:bg-slate-100 transition disabled:opacity-50"
-                  >
-                    {isLoadingInsight ? 'Analyzing...' : 'Generate Report'}
-                  </button>
+          <div className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-3xl p-6">
+            {!signal ? (
+              <div className="h-full min-h-[420px] grid place-items-center text-slate-400 text-center px-8">
+                Run the model to get a structured crypto setup. This is decision support, not financial advice.
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-2xl font-bold">{signal.pair} · {signal.timeframe}</h2>
+                  <span className={`px-3 py-1 rounded-full border text-xs font-semibold ${signalTheme[signal.signal]}`}>
+                    {formatSignal(signal.signal)}
+                  </span>
+                  <span className="text-sm text-slate-300">Confidence: {signal.confidence}%</span>
                 </div>
 
-                {insight && (
-                  <div className="bg-white/5 rounded-3xl p-8 border border-white/10 animate-in fade-in zoom-in duration-500">
-                    <div className="flex items-center justify-between mb-6">
-                      <h4 className="text-xl font-bold">{insight.location} Overview</h4>
-                      <div className={`px-4 py-1 rounded-full text-xs font-bold uppercase ${
-                        insight.trend === 'up' ? 'bg-emerald-400/20 text-emerald-400' : 'bg-red-400/20 text-red-400'
-                      }`}>
-                        {insight.trend === 'up' ? '↑ Rising' : '↓ Cooling'}
-                      </div>
+                <div className="grid sm:grid-cols-2 gap-4 text-sm">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4"><b>Entry zone:</b> {signal.entryZone}</div>
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4"><b>Stop loss:</b> {signal.stopLoss}</div>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                  <h3 className="font-semibold mb-2">Take profit levels</h3>
+                  <ul className="list-disc pl-5 space-y-1 text-slate-300">
+                    {signal.takeProfit.map((tp, idx) => <li key={idx}>{tp}</li>)}
+                  </ul>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4"><b>Detected pattern:</b> {signal.pattern}</div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                    <h3 className="font-semibold mb-2">Rationale</h3>
+                    <ul className="list-disc pl-5 space-y-1 text-slate-300">
+                      {signal.rationale.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                    <h3 className="font-semibold mb-2">Risk notes</h3>
+                    <ul className="list-disc pl-5 space-y-1 text-slate-300">
+                      {signal.riskNotes.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm">
+                  <h3 className="font-semibold mb-2">News context</h3>
+                  <p className="text-slate-300">{signal.newsSummary}</p>
+                </div>
+
+                {signal.sources.length > 0 && (
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
+                    <h3 className="font-semibold mb-2">Sources</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {signal.sources.slice(0, 6).map((source, index) => (
+                        <a
+                          key={`${source.uri}-${index}`}
+                          href={source.uri}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
+                        >
+                          {source.title || 'Source'}
+                        </a>
+                      ))}
                     </div>
-                    <div className="text-slate-300 text-sm leading-relaxed mb-6 space-y-2">
-                       {insight.summary.split('\n').map((line, i) => <p key={i}>{line}</p>)}
-                    </div>
-                    {insight.sources.length > 0 && (
-                      <div className="pt-6 border-t border-white/10">
-                        <span className="block text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-3">Sources Verified</span>
-                        <div className="flex flex-wrap gap-2">
-                          {insight.sources.slice(0, 3).map((source, i) => (
-                            <a 
-                              key={i} 
-                              href={source.uri} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              className="text-xs bg-white/10 px-3 py-1.5 rounded-lg hover:bg-white/20 transition truncate max-w-[150px]"
-                            >
-                              {source.title}
-                            </a>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
-              <div className="lg:w-1/3 bg-slate-800 relative hidden lg:block overflow-hidden">
-                <img 
-                  src="https://picsum.photos/seed/luxuryarch/800/1200" 
-                  alt="Architecture" 
-                  className="absolute inset-0 w-full h-full object-cover opacity-60 mix-blend-overlay"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
-              </div>
-            </div>
+            )}
           </div>
         </section>
-
-        {/* CTA Section */}
-        <section className="py-24 bg-white">
-          <div className="max-w-4xl mx-auto px-4 text-center">
-            <h2 className="text-4xl md:text-6xl font-bold mb-8">Ready to find your <span className="serif italic font-light">dream estate</span>?</h2>
-            <p className="text-slate-600 text-xl mb-12">Connect with our senior consultants today and experience the MM&GG advantage.</p>
-            <div className="flex flex-col sm:flex-row justify-center gap-6">
-              <button className="px-10 py-5 bg-slate-900 text-white rounded-2xl font-bold text-lg hover:bg-slate-800 transition shadow-2xl">
-                Contact an Agent
-              </button>
-              <button className="px-10 py-5 border-2 border-slate-900 text-slate-900 rounded-2xl font-bold text-lg hover:bg-slate-50 transition">
-                List Your Property
-              </button>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-slate-50 border-t border-slate-100 pt-20 pb-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-20">
-            <div className="col-span-1 md:col-span-1">
-              <div className="flex items-center gap-2 mb-6">
-                <div className="w-8 h-8 bg-slate-900 rounded-full flex items-center justify-center text-white font-bold">M</div>
-                <span className="font-bold text-xl tracking-tight">MM&GG</span>
-              </div>
-              <p className="text-slate-500 text-sm leading-relaxed mb-8">
-                Excellence in luxury real estate, powered by artificial intelligence and decades of local expertise.
-              </p>
-            </div>
-            <div>
-              <h5 className="font-bold text-slate-900 mb-6">Properties</h5>
-              <ul className="space-y-4 text-sm text-slate-500">
-                <li><a href="#" className="hover:text-slate-900 transition">Buy a Home</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition">Sell Your Estate</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition">Luxury Rentals</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition">Investment Portfolio</a></li>
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-bold text-slate-900 mb-6">Company</h5>
-              <ul className="space-y-4 text-sm text-slate-500">
-                <li><a href="#" className="hover:text-slate-900 transition">Our Story</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition">AI Technology</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition">Careers</a></li>
-                <li><a href="#" className="hover:text-slate-900 transition">Press Room</a></li>
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-bold text-slate-900 mb-6">Newsletter</h5>
-              <p className="text-sm text-slate-500 mb-4">Subscribe to receive curated luxury listings and market reports.</p>
-              <div className="flex gap-2">
-                <input type="email" placeholder="Email address" className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm w-full focus:ring-2 focus:ring-slate-900 outline-none" />
-                <button className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold">Join</button>
-              </div>
-            </div>
-          </div>
-          <div className="pt-8 border-t border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-xs">
-            <p>© 2025 MM&GG Real Estate Ltd. All rights reserved.</p>
-            <div className="flex gap-8">
-              <a href="#" className="hover:text-slate-900 transition">Privacy Policy</a>
-              <a href="#" className="hover:text-slate-900 transition">Terms of Service</a>
-              <a href="#" className="hover:text-slate-900 transition">Cookie Settings</a>
-            </div>
-          </div>
-        </div>
-      </footer>
-
-      {/* Floating AI Assistant */}
-      <AIChatAssistant />
+      </div>
     </div>
   );
 };
